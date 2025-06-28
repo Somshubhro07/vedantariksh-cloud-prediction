@@ -1,7 +1,7 @@
 # models/diffusion_conditional.py
-from regex import F
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 class ConditionalDiffusion(nn.Module):

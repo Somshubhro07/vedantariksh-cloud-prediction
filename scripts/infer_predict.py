@@ -21,8 +21,9 @@ diffusion = ConditionalDiffusion(model).to(device)
 
 # Load 2 input frames
 dataset = CloudSequenceDataset("data/samples", input_frames=2, output_frames=4)
-input_seq, _ = dataset[0]
-cond = input_seq.permute(1, 0, 2, 3).squeeze(1).unsqueeze(0).to(device)  # [1, 2, H, W]
+input_seq, _ = dataset[0]               # shape: [2, 1, H, W]
+input_seq = input_seq.unsqueeze(0)      # shape: [1, 2, 1, H, W]
+cond = input_seq.reshape(1, -1, input_seq.shape[-2], input_seq.shape[-1]).to(device)
 
 # Predict next 4 frames
 os.makedirs("outputs", exist_ok=True)

@@ -44,7 +44,11 @@ for epoch in range(epochs):
 
         if epoch % 50 == 0:
             print(f"Epoch {epoch:04d} | Loss: {total_loss:.4f}")
+            os.makedirs("checkpoints", exist_ok=True)
+            torch.save(unet.state_dict(), "checkpoints/unet_cloud.pth")
+            print(f"Saved model at epoch {epoch}")
 
 # Save checkpoint
 os.makedirs("checkpoints", exist_ok=True)
 torch.save(unet.state_dict(), "checkpoints/unet_cloud.pth")
+print("Model saved to checkpoints/unet_cloud.pth")

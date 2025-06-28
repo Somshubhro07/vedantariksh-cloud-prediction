@@ -43,3 +43,6 @@ dist/
 .env
 *.yaml
 config.yaml
+
+#for sample output
+outputs/
