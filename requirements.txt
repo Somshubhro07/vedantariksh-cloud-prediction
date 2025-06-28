@@ -1,0 +1,27 @@
+# Core
+numpy
+pandas
+xarray
+matplotlib
+opencv-python
+scikit-image
+scikit-learn
+tqdm
+
+# ML
+torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+pytorch-lightning
+
+# Geospatial (install separately if needed)
+# gdal==3.6.0
+# rasterio==1.3.6
+
+# Diffusion
+diffusers
+
+# Visualization
+plotly
+
+# Optional (Frontend)
+ streamlit
+ flask

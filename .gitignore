@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.pyd
+*.pyo
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# VS Code
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data and model artifacts
+*.h5
+*.ckpt
+*.pt
+*.pth
+*.log
+*.csv
+*.npz
+*.npy
+*.db
+*.sqlite3
+
+# Cache
+.cache/
+*.egg-info/
+build/
+dist/
+
+# Dotenv or config
+.env
+*.yaml
+config.yaml
