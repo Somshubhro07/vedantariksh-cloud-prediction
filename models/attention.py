@@ -1,4 +1,3 @@
-# models/attention.py
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -30,18 +29,18 @@ class SelfAttention(nn.Module):
         q, k, v = qkv.chunk(3, dim=1)
         
         # Reshape for multi-head attention
-        q = q.view(B, self.num_heads, self.head_dim, H * W)
-        k = k.view(B, self.num_heads, self.head_dim, H * W)
-        v = v.view(B, self.num_heads, self.head_dim, H * W)
+        q = q.view(B, self.num_heads, self.head_dim, H * W).transpose(2, 3)
+        k = k.view(B, self.num_heads, self.head_dim, H * W).transpose(2, 3)
+        v = v.view(B, self.num_heads, self.head_dim, H * W).transpose(2, 3)
         
         # Attention
         scale = 1.0 / math.sqrt(self.head_dim)
-        attn = torch.einsum('bhdn,bhdm->bhnm', q, k) * scale
+        attn = torch.matmul(q, k.transpose(-2, -1)) * scale
         attn = F.softmax(attn, dim=-1)
         
         # Apply attention
-        out = torch.einsum('bhnm,bhdm->bhdn', attn, v)
-        out = out.view(B, C, H, W)
+        out = torch.matmul(attn, v)
+        out = out.transpose(2, 3).reshape(B, C, H, W)  # Use reshape instead of view
         
         # Output projection
         out = self.out(out)

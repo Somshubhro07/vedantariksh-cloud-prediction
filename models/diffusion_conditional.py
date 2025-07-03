@@ -34,20 +34,16 @@ class ConditionalDiffusion(nn.Module):
         self.register_buffer('alphas', alphas)
         self.register_buffer('alphas_cumprod', alphas_cumprod)
         
-        # Define alphas_cumprod_prev BEFORE using it in posterior_variance calculation
         alphas_cumprod_prev = F.pad(alphas_cumprod[:-1], (1, 0), value=1.0)
         self.register_buffer('alphas_cumprod_prev', alphas_cumprod_prev)
         
-        # Calculations for diffusion q(x_t | x_{t-1}) and others
         self.register_buffer('sqrt_alphas_cumprod', torch.sqrt(alphas_cumprod))
         self.register_buffer('sqrt_one_minus_alphas_cumprod', torch.sqrt(1.0 - alphas_cumprod))
         
-        # Calculations for posterior q(x_{t-1} | x_t, x_0)
         posterior_variance = betas * (1.0 - alphas_cumprod_prev) / (1.0 - alphas_cumprod)
         self.register_buffer('posterior_variance', posterior_variance)
     
     def _cosine_beta_schedule(self, timesteps: int, s: float = 0.008):
-        """Cosine beta schedule"""
         steps = timesteps + 1
         x = torch.linspace(0, timesteps, steps)
         alphas_cumprod = torch.cos(((x / timesteps) + s) / (1 + s) * torch.pi * 0.5) ** 2
@@ -56,45 +52,53 @@ class ConditionalDiffusion(nn.Module):
         return torch.clip(betas, 0.0001, 0.9999)
     
     def q_sample(self, x_start: torch.Tensor, t: torch.Tensor, noise: Optional[torch.Tensor] = None):
-        """Forward diffusion process"""
         if noise is None:
             noise = torch.randn_like(x_start)
         
-        sqrt_alphas_cumprod_t = self.sqrt_alphas_cumprod[t]
-        sqrt_one_minus_alphas_cumprod_t = self.sqrt_one_minus_alphas_cumprod[t]
-        
-        # Reshape for broadcasting
-        sqrt_alphas_cumprod_t = sqrt_alphas_cumprod_t.view(-1, 1, 1, 1)
-        sqrt_one_minus_alphas_cumprod_t = sqrt_one_minus_alphas_cumprod_t.view(-1, 1, 1, 1)
+        sqrt_alphas_cumprod_t = self.sqrt_alphas_cumprod[t].view(-1, 1, 1, 1)
+        sqrt_one_minus_alphas_cumprod_t = self.sqrt_one_minus_alphas_cumprod[t].view(-1, 1, 1, 1)
         
         return sqrt_alphas_cumprod_t * x_start + sqrt_one_minus_alphas_cumprod_t * noise
     
     def p_losses(self, x_start: torch.Tensor, conditioning_frames: torch.Tensor, t: torch.Tensor):
-        """Calculate training loss"""
-        noise = torch.randn_like(x_start)
-        x_noisy = self.q_sample(x_start, t, noise)
+        # x_start: [batch, seq_len, channels, height, width] -> [batch, 2, 1, 6, 128, 128]
+        # conditioning_frames: [batch, seq_len, channels, height, width] -> [batch, 4, 1, 6, 128, 128]
         
-        # Concatenate conditioning_frames with x_noisy along the channel dimension
-        model_input = torch.cat([conditioning_frames, x_noisy], dim=1)  # Ensure dim=1 is correct
+        batch_size = x_start.shape[0]
+        
+        # Reshape to [batch, seq_len * channels, height, width]
+        # x_start: [batch, 2, 1, 6, 128, 128] -> [batch, 12, 128, 128]
+        x_start_flat = x_start.view(batch_size, -1, x_start.shape[-2], x_start.shape[-1])
+        
+        # conditioning_frames: [batch, 4, 1, 6, 128, 128] -> [batch, 24, 128, 128]
+        conditioning_flat = conditioning_frames.view(batch_size, -1, conditioning_frames.shape[-2], conditioning_frames.shape[-1])
+        
+        noise = torch.randn_like(x_start_flat)
+        x_noisy = self.q_sample(x_start_flat, t, noise)
+        
+        # Concatenate: [batch, 24, 128, 128] + [batch, 12, 128, 128] = [batch, 36, 128, 128]
+        model_input = torch.cat([conditioning_flat, x_noisy], dim=1)
+        
         predicted_noise = self.model(model_input, t)
         
         return F.mse_loss(predicted_noise, noise)
     
     @torch.no_grad()
     def p_sample(self, x: torch.Tensor, conditioning_frames: torch.Tensor, t: torch.Tensor):
-        """Sample from p(x_{t-1} | x_t)"""
-        model_input = torch.cat([conditioning_frames, x], dim=1)
+        # Handle the same reshaping as in p_losses
+        batch_size = x.shape[0]
+        conditioning_flat = conditioning_frames.view(batch_size, -1, conditioning_frames.shape[-2], conditioning_frames.shape[-1])
+        
+        model_input = torch.cat([conditioning_flat, x], dim=1)
         predicted_noise = self.model(model_input, t)
         
         alpha_t = self.alphas[t].view(-1, 1, 1, 1)
         alpha_cumprod_t = self.alphas_cumprod[t].view(-1, 1, 1, 1)
         beta_t = self.betas[t].view(-1, 1, 1, 1)
         
-        # Predict x_0
         pred_x0 = (x - torch.sqrt(1 - alpha_cumprod_t) * predicted_noise) / torch.sqrt(alpha_cumprod_t)
         pred_x0 = torch.clamp(pred_x0, -1, 1)
         
-        # Compute mean
         pred_mean = (x - beta_t / torch.sqrt(1 - alpha_cumprod_t) * predicted_noise) / torch.sqrt(alpha_t)
         
         if t[0] == 0:
@@ -106,11 +110,10 @@ class ConditionalDiffusion(nn.Module):
     
     @torch.no_grad()
     def sample(self, conditioning_frames: torch.Tensor, shape: tuple):
-        """Generate samples"""
         device = conditioning_frames.device
         batch_size = conditioning_frames.shape[0]
         
-        # Start from random noise
+        # shape should be for the flattened target: [12, 128, 128] for 2 frames * 6 channels
         x = torch.randn(batch_size, *shape[1:], device=device)
         
         for i in reversed(range(self.timesteps)):

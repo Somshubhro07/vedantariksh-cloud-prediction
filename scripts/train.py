@@ -1,11 +1,9 @@
-# scripts/train.py
 import torch
 from torch.utils.data import DataLoader, random_split
 import argparse
 import sys
 import os
 
-# Add project root to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config.config import Config
@@ -23,7 +21,6 @@ def main():
     config = Config()
     config.data.root_dir = args.data_dir
     
-    # Create a small sample dataset first to understand the tensor shapes
     sample_dataset = CloudSequenceDataset(
         root_dir=config.data.root_dir,
         input_frames=config.data.input_frames,
@@ -33,41 +30,17 @@ def main():
         normalize=config.data.normalize
     )
     
-    # Get a sample to understand the actual tensor shapes
     sample_input, sample_target = sample_dataset[0]
-    print(f"Sample input shape: {sample_input.shape}")
-    print(f"Sample target shape: {sample_target.shape}")
     
-    # Calculate input channels based on actual tensor shapes
-    if len(sample_input.shape) == 5:
-        # Format: [input_frames, batch_or_sequence, channels, H, W]
-        input_frames, batch_dim, channels, height, width = sample_input.shape
-        conditioning_channels = input_frames * channels  # This will be 4 * 6 = 24
-    elif len(sample_input.shape) == 4:
-        # Format: [input_frames, channels, H, W]
-        input_frames, channels, height, width = sample_input.shape
-        conditioning_channels = input_frames * channels
-    else:
-        raise ValueError(f"Unexpected sample input shape: {sample_input.shape}")
+    # Calculate channels based on actual tensor processing in training loop
+    # Input: [input_frames, 1, channels, H, W] -> [input_frames * channels, H, W]
+    conditioning_channels = sample_input.shape[0] * sample_input.shape[2]  # 4 * 6 = 24
+    # Target: [output_frames, 1, channels, H, W] -> [channels, H, W] (per frame)
+    target_channels = sample_target.shape[2]  # 6
     
-    # Calculate target channels
-    if len(sample_target.shape) == 5:
-        # Format: [output_frames, batch_or_sequence, channels, H, W]
-        output_frames, batch_dim, target_channels, height, width = sample_target.shape
-    elif len(sample_target.shape) == 4:
-        # Format: [output_frames, channels, H, W]
-        output_frames, target_channels, height, width = sample_target.shape
-    else:
-        raise ValueError(f"Unexpected sample target shape: {sample_target.shape}")
-    
-    # UNet input channels = conditioning_channels + target_channels (for concatenation)
-    # During training: conditioning (24) + noisy_target (6) = 30 channels
-    unet_input_channels = conditioning_channels + target_channels
-    unet_output_channels = target_channels  # UNet predicts noise, same shape as target
-    
-    config.model.in_channels = unet_input_channels
-    config.model.out_channels = unet_output_channels
-    config.training.epochs = 500  # Reduced for initial run
+    # UNet input will be conditioning + target (concatenated)
+    config.model.in_channels = conditioning_channels + target_channels  # 24 + 6 = 30
+    config.model.out_channels = target_channels  # 6 (predicting noise for single frame)
     
     logger = Logger("CloudTraining", config.log_dir)
     logger.info(f"Sample input shape: {sample_input.shape}")
@@ -79,7 +52,6 @@ def main():
     
     device = torch.device(config.device)
     
-    # Create full dataset
     full_dataset = CloudSequenceDataset(
         root_dir=config.data.root_dir,
         input_frames=config.data.input_frames,
@@ -93,8 +65,8 @@ def main():
     val_size = len(full_dataset) - train_size
     train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
     
-    train_loader = DataLoader(train_dataset, batch_size=config.training.batch_size, shuffle=True, num_workers=4)
-    val_loader = DataLoader(val_dataset, batch_size=config.training.batch_size, shuffle=False, num_workers=4)
+    train_loader = DataLoader(train_dataset, batch_size=config.training.batch_size, shuffle=True, num_workers=4, pin_memory=True)
+    val_loader = DataLoader(val_dataset, batch_size=config.training.batch_size, shuffle=False, num_workers=4, pin_memory=True)
     
     unet = ConditionalUNet(
         in_channels=config.model.in_channels,
