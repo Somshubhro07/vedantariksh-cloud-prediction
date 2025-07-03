@@ -17,32 +17,18 @@ from models.diffusion_conditional import ConditionalDiffusion
 
 def main():
     parser = argparse.ArgumentParser(description='Train Cloud Prediction Model')
-    parser.add_argument('--data_dir', type=str, default='data/samples', help='Data directory')
-    parser.add_argument('--batch_size', type=int, default=8, help='Batch size')
-    parser.add_argument('--epochs', type=int, default=1000, help='Number of epochs')
-    parser.add_argument('--lr', type=float, default=1e-4, help='Learning rate')
-    parser.add_argument('--resume', type=str, default=None, help='Resume from checkpoint')
-    
+    parser.add_argument('--data_dir', type=str, default='data/insat_data', help='Data directory')
     args = parser.parse_args()
     
-    # Initialize config
     config = Config()
     config.data.root_dir = args.data_dir
-    config.training.batch_size = args.batch_size
-    config.training.epochs = args.epochs
-    config.training.learning_rate = args.lr
+    config.model.in_channels = 6  # 6 channels
+    config.model.out_channels = 6
+    config.training.epochs = 500  # Reduced for initial run
     
-    # Initialize logger
     logger = Logger("CloudTraining", config.log_dir)
-    logger.info("Starting cloud prediction training")
-    logger.info(f"Configuration: {config}")
-    
-    # Setup device
     device = torch.device(config.device)
-    logger.info(f"Using device: {device}")
     
-    # Load dataset
-    logger.info("Loading dataset...")
     full_dataset = CloudSequenceDataset(
         root_dir=config.data.root_dir,
         input_frames=config.data.input_frames,
@@ -52,59 +38,21 @@ def main():
         normalize=config.data.normalize
     )
     
-    # Split dataset
     train_size = int(0.8 * len(full_dataset))
     val_size = len(full_dataset) - train_size
     train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
     
-    logger.info(f"Dataset size - Train: {len(train_dataset)}, Val: {len(val_dataset)}")
+    train_loader = DataLoader(train_dataset, batch_size=config.training.batch_size, shuffle=True, num_workers=4)
+    val_loader = DataLoader(val_dataset, batch_size=config.training.batch_size, shuffle=False, num_workers=4)
     
-    # Create data loaders
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=config.training.batch_size,
-        shuffle=True,
-        num_workers=4,
-        pin_memory=True
-    )
-    
-    val_loader = DataLoader(
-        val_dataset,
-        batch_size=config.training.batch_size,
-        shuffle=False,
-        num_workers=4,
-        pin_memory=True
-    )
-    
-    # Initialize models
-    logger.info("Initializing models...")
     unet = ConditionalUNet(
         in_channels=config.model.in_channels,
         out_channels=config.model.out_channels,
-        base_channels=config.model.base_channels,
-        num_groups=config.model.num_groups,
-        attention_resolutions=config.model.attention_resolutions,
-        dropout=config.model.dropout,
-        use_attention=config.model.use_attention
+        base_channels=config.model.base_channels
     ).to(device)
     
-    diffusion = ConditionalDiffusion(
-        model=unet,
-        timesteps=config.diffusion.timesteps,
-        beta_start=config.diffusion.beta_start,
-        beta_end=config.diffusion.beta_end,
-        schedule_type=config.diffusion.schedule_type
-    ).to(device)
-    
-    # Initialize trainer
+    diffusion = ConditionalDiffusion(model=unet).to(device)
     trainer = Trainer(unet, diffusion, train_loader, val_loader, config, logger)
-    
-    # Resume from checkpoint if specified
-    if args.resume:
-        logger.info(f"Resuming from checkpoint: {args.resume}")
-        trainer.load_checkpoint(args.resume)
-    
-    # Start training
     trainer.train()
 
 if __name__ == "__main__":

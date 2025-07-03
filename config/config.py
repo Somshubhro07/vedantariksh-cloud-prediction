@@ -1,14 +1,14 @@
 # config/config.py
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Tuple, Optional
 import torch
 
 @dataclass
 class ModelConfig:
     """Model configuration parameters"""
-    in_channels: int = 3  # 2 conditioning frames + 1 noisy frame
-    out_channels: int = 1
+    in_channels: int = 6  # 6 channels per frame + conditioning
+    out_channels: int = 6
     base_channels: int = 64
     num_groups: int = 8  # For GroupNorm
     attention_resolutions: Tuple[int, ...] = (16, 8)
@@ -37,9 +37,9 @@ class TrainingConfig:
 @dataclass
 class DataConfig:
     """Data configuration"""
-    root_dir: str = "data/samples"
-    input_frames: int = 2
-    output_frames: int = 4
+    root_dir: str = "data/insat_data"
+    input_frames: int = 4
+    output_frames: int = 2
     image_size: Tuple[int, int] = (256, 256)
     augmentation: bool = True
     normalize: bool = True
@@ -47,10 +47,10 @@ class DataConfig:
 @dataclass
 class Config:
     """Main configuration class"""
-    model: ModelConfig = ModelConfig()
-    diffusion: DiffusionConfig = DiffusionConfig()
-    training: TrainingConfig = TrainingConfig()
-    data: DataConfig = DataConfig()
+    model: ModelConfig = field(default_factory=ModelConfig)
+    diffusion: DiffusionConfig = field(default_factory=DiffusionConfig)
+    training: TrainingConfig = field(default_factory=TrainingConfig)
+    data: DataConfig = field(default_factory=DataConfig)
     
     # Device and paths
     device: str = "cuda" if torch.cuda.is_available() else "cpu"

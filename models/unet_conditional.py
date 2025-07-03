@@ -91,11 +91,11 @@ class TimeEmbedding(nn.Module):
 
 class ConditionalUNet(nn.Module):
     """Enhanced UNet with time embedding and attention"""
-    
+
     def __init__(
         self,
-        in_channels: int = 3,
-        out_channels: int = 1,
+        in_channels: int = 6,  # 6 channels per frame + conditioning
+        out_channels: int = 6,  # 6 channels output
         base_channels: int = 64,
         num_groups: int = 8,
         attention_resolutions: Tuple[int, ...] = (16, 8),

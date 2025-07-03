@@ -110,39 +110,25 @@ class Trainer:
         self.val_losses = []
     
     def train_epoch(self):
-        """Train for one epoch"""
         self.model.train()
         total_loss = 0
         num_batches = 0
         
         pbar = tqdm(self.train_loader, desc=f"Epoch {self.epoch}")
-        
         for input_seq, target_seq in pbar:
             input_seq = input_seq.to(self.device)
             target_seq = target_seq.to(self.device)
             
             batch_loss = 0
-            
-            # Train on each target frame
             for i in range(target_seq.shape[1]):
-                target = target_seq[:, i]  # [B, 1, H, W]
-                
-                # Reshape conditioning frames
-                cond = input_seq.view(input_seq.shape[0], -1, input_seq.shape[-2], input_seq.shape[-1])
-                
-                # Sample random timestep
+                target = target_seq[:, i]  # [B, channels, H, W]
+                cond = input_seq.reshape(input_seq.shape[0], -1, input_seq.shape[-2], input_seq.shape[-1])
                 t = torch.randint(0, self.diffusion.timesteps, (input_seq.shape[0],), device=self.device)
-                
-                # Calculate loss
                 loss = self.diffusion.p_losses(target, cond, t)
                 
-                # Backward pass
                 self.optimizer.zero_grad()
                 loss.backward()
-                
-                # Gradient clipping
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config.training.gradient_clip_val)
-                
                 self.optimizer.step()
                 self.scheduler.step()
                 self.ema.update()
@@ -152,7 +138,6 @@ class Trainer:
             
             total_loss += batch_loss
             num_batches += 1
-            
             pbar.set_postfix({'loss': batch_loss / target_seq.shape[1]})
         
         avg_loss = total_loss / (num_batches * target_seq.shape[1])

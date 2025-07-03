@@ -46,3 +46,7 @@ config.yaml
 
 #for sample output
 outputs/
+
+#for training data
+data
+test
