@@ -74,8 +74,8 @@ class ConditionalDiffusion(nn.Module):
         noise = torch.randn_like(x_start)
         x_noisy = self.q_sample(x_start, t, noise)
         
-        # Concatenate conditioning frames with noisy frame
-        model_input = torch.cat([conditioning_frames, x_noisy], dim=1)
+        # Concatenate conditioning_frames with x_noisy along the channel dimension
+        model_input = torch.cat([conditioning_frames, x_noisy], dim=1)  # Ensure dim=1 is correct
         predicted_noise = self.model(model_input, t)
         
         return F.mse_loss(predicted_noise, noise)

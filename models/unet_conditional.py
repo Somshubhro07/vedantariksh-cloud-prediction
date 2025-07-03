@@ -94,8 +94,8 @@ class ConditionalUNet(nn.Module):
 
     def __init__(
         self,
-        in_channels: int = 6,  # 6 channels per frame + conditioning
-        out_channels: int = 6,  # 6 channels output
+        in_channels: int = 30,  # conditioning (24) + noisy target (6) = 30
+        out_channels: int = 6,  # 6 channels output (noise prediction)
         base_channels: int = 64,
         num_groups: int = 8,
         attention_resolutions: Tuple[int, ...] = (16, 8),

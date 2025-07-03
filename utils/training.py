@@ -110,6 +110,7 @@ class Trainer:
         self.val_losses = []
     
     def train_epoch(self):
+        """Train for one epoch"""
         self.model.train()
         total_loss = 0
         num_batches = 0
@@ -119,16 +120,46 @@ class Trainer:
             input_seq = input_seq.to(self.device)
             target_seq = target_seq.to(self.device)
             
+            # Debug: Print tensor shapes to understand the actual structure
+            if num_batches == 0:  # Only log once per epoch
+                self.logger.info(f"Input seq shape: {input_seq.shape}")
+                self.logger.info(f"Target seq shape: {target_seq.shape}")
+            
             batch_loss = 0
-            for i in range(target_seq.shape[1]):
-                target = target_seq[:, i]  # [B, channels, H, W]
-                cond = input_seq.reshape(input_seq.shape[0], -1, input_seq.shape[-2], input_seq.shape[-1])
-                t = torch.randint(0, self.diffusion.timesteps, (input_seq.shape[0],), device=self.device)
+            
+            # Handle input sequence - reshape to conditioning tensor
+            if len(input_seq.shape) == 5:
+                # Format: [batch_size, input_frames, channels, H, W]
+                batch_size, input_frames, channels, height, width = input_seq.shape
+                # Reshape to [batch_size, input_frames * channels, H, W]
+                cond = input_seq.view(batch_size, input_frames * channels, height, width)
+            else:
+                raise ValueError(f"Unexpected input_seq shape: {input_seq.shape}")
+            
+            # Handle target sequence
+            if len(target_seq.shape) == 5:
+                # Format: [batch_size, output_frames, channels, H, W]
+                batch_size, output_frames, channels, height, width = target_seq.shape
+            else:
+                raise ValueError(f"Unexpected target_seq shape: {target_seq.shape}")
+
+            # Train on each target frame
+            for i in range(output_frames):
+                target = target_seq[:, i]  # [batch_size, channels, H, W]
+                
+                # Sample random timestep
+                t = torch.randint(0, self.diffusion.timesteps, (batch_size,), device=self.device)
+                
+                # Calculate loss
                 loss = self.diffusion.p_losses(target, cond, t)
                 
+                # Backward pass
                 self.optimizer.zero_grad()
                 loss.backward()
+                
+                # Gradient clipping
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config.training.gradient_clip_val)
+                
                 self.optimizer.step()
                 self.scheduler.step()
                 self.ema.update()
@@ -138,9 +169,10 @@ class Trainer:
             
             total_loss += batch_loss
             num_batches += 1
-            pbar.set_postfix({'loss': batch_loss / target_seq.shape[1]})
+            
+            pbar.set_postfix({'loss': batch_loss / output_frames})
         
-        avg_loss = total_loss / (num_batches * target_seq.shape[1])
+        avg_loss = total_loss / (num_batches * output_frames)
         self.train_losses.append(avg_loss)
         return avg_loss
     
@@ -157,10 +189,25 @@ class Trainer:
             
             batch_loss = 0
             
-            for i in range(target_seq.shape[1]):
+            # Handle input sequence - reshape to conditioning tensor
+            if len(input_seq.shape) == 5:
+                # Format: [batch_size, input_frames, channels, H, W]
+                batch_size, input_frames, channels, height, width = input_seq.shape
+                # Reshape to [batch_size, input_frames * channels, H, W]
+                cond = input_seq.view(batch_size, input_frames * channels, height, width)
+            else:
+                raise ValueError(f"Unexpected input_seq shape: {input_seq.shape}")
+            
+            # Handle target sequence
+            if len(target_seq.shape) == 5:
+                # Format: [batch_size, output_frames, channels, H, W]
+                batch_size, output_frames, channels, height, width = target_seq.shape
+            else:
+                raise ValueError(f"Unexpected target_seq shape: {target_seq.shape}")
+            
+            for i in range(output_frames):
                 target = target_seq[:, i]
-                cond = input_seq.view(input_seq.shape[0], -1, input_seq.shape[-2], input_seq.shape[-1])
-                t = torch.randint(0, self.diffusion.timesteps, (input_seq.shape[0],), device=self.device)
+                t = torch.randint(0, self.diffusion.timesteps, (batch_size,), device=self.device)
                 
                 loss = self.diffusion.p_losses(target, cond, t)
                 batch_loss += loss.item()
@@ -168,7 +215,7 @@ class Trainer:
             total_loss += batch_loss
             num_batches += 1
         
-        avg_loss = total_loss / (num_batches * target_seq.shape[1])
+        avg_loss = total_loss / (num_batches * output_frames)
         self.val_losses.append(avg_loss)
         return avg_loss
     
